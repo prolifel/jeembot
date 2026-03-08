@@ -48,6 +48,7 @@ type Config struct {
 	TeamsHMACSecret     string
 	TeamsAppID          string
 	TeamsAppSecret      string
+	TeamsTenantID       string
 }
 
 // LoadConfig creates Config from environment variables
@@ -67,6 +68,7 @@ func LoadConfig() *Config {
 		TeamsHMACSecret:      getEnv("TEAMS_HMAC_SECRET", ""),
 		TeamsAppID:           getEnv("TEAMS_APP_ID", ""),
 		TeamsAppSecret:       getEnv("TEAMS_APP_SECRET", ""),
+		TeamsTenantID:        getEnv("TEAMS_TENANT_ID", ""),
 	}
 
 	// Validate required configuration
@@ -131,8 +133,9 @@ type TeamsChannel struct {
 
 // TeamsResponse is the response sent back to Microsoft Teams
 type TeamsResponse struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type        string       `json:"type"`
+	Text        string       `json:"text"`
+	Attachments []Attachment `json:"attachments,omitempty"`
 }
 
 // ClickUpTaskRequest represents the request to create a task in ClickUp
@@ -208,4 +211,68 @@ type ActivityResponse struct {
 	Recipient    *ChannelAccount  `json:"recipient"`
 	Conversation *ConversationAccount `json:"conversation"`
 	ChannelID    string           `json:"channelId"`
+	Attachments  []Attachment     `json:"attachments"`
+}
+
+// --- Adaptive Card Types ---
+
+// AdaptiveCard represents a Microsoft Adaptive Card
+type AdaptiveCard struct {
+	Type       string          `json:"type"`
+	Version    string          `json:"version"`
+	Body       []CardElement   `json:"body"`
+	Actions    []CardAction    `json:"actions,omitempty"`
+	Schema     string          `json:"$schema,omitempty"`
+}
+
+// CardElement represents an element in an Adaptive Card
+type CardElement struct {
+	Type     string         `json:"type"`
+	Text     string         `json:"text,omitempty"`
+	URL      string         `json:"url,omitempty"`
+	Title    string         `json:"title,omitempty"`
+	Style    string         `json:"style,omitempty"`
+	Size     string         `json:"size,omitempty"`
+	Weight   string         `json:"weight,omitempty"`
+	Color    string         `json:"color,omitempty"`
+	Items    []CardElement  `json:"items,omitempty"`
+	Columns  []CardColumn   `json:"columns,omitempty"`
+	Facts    []Fact         `json:"facts,omitempty"`
+	Spacing  string         `json:"spacing,omitempty"`
+	HorizontalAlignment string `json:"horizontalAlignment,omitempty"`
+	IsSubtle bool           `json:"isSubtle,omitempty"`
+	Wrap     bool           `json:"wrap,omitempty"`
+}
+
+// CardColumnSet represents a column set in an Adaptive Card
+type CardColumnSet struct {
+	Type     string        `json:"type"`
+	Columns  []CardColumn  `json:"columns"`
+}
+
+// Fact represents a key-value pair in a FactSet
+type Fact struct {
+	Title string `json:"title"`
+	Value string `json:"value"`
+}
+
+// CardColumn represents a column in a column set
+type CardColumn struct {
+	Type    string        `json:"type"`
+	Width   string        `json:"width"`
+	Items   []CardElement `json:"items"`
+}
+
+// CardAction represents an action in an Adaptive Card
+type CardAction struct {
+	Type  string `json:"type"`
+	Title string `json:"title"`
+	URL   string `json:"url,omitempty"`
+	// For Bot Framework, use msteams property for Teams-specific actions
+	MSTeams *MSTeamsAction `json:"msteams,omitempty"`
+}
+
+// MSTeamsAction represents Teams-specific action properties
+type MSTeamsAction struct {
+	Type string `json:"type"`
 }

@@ -8,13 +8,13 @@
   },
   "developer": {
     "name": "jeembot",
-    "websiteUrl": "https://npuwv-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link",
-    "privacyUrl": "https://npuwv-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/privacy",
-    "termsOfUseUrl": "https://npuwv-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/tos"
+    "websiteUrl": "https://cqxem-182-253-48-39.a.free.pinggy.link",
+    "privacyUrl": "https://cqxem-182-253-48-39.a.free.pinggy.link/privacy",
+    "termsOfUseUrl": "https://cqxem-182-253-48-39.a.free.pinggy.link/tos"
   },
   "description": {
     "short": "jeembot",
-    "full": "jeembot is a Teams bot that integrates with ClickUp for task management. It allows users to create, update, and manage tasks directly from Microsoft Teams conversations."
+    "full": "Teams bot that integrates with ClickUp for task management. It allows users to create, update, and manage tasks directly from Microsoft Teams conversations."
   },
   "icons": {
     "outline": "outline.png",
@@ -24,16 +24,11 @@
   "bots": [
     {
       "botId": "e09e26fc-9231-4610-b130-f4494c4fb069",
-      "scopes": [
-        "personal",
-        "team",
-        "groupChat"
-      ],
+      "scopes": ["personal", "team", "groupChat"],
       "isNotificationOnly": false,
       "supportsCalling": false,
       "supportsVideo": false,
-      "supportsFiles": false,
-      "supportsChannelFeatures": true
+      "supportsFiles": false
     }
   ],
   "composeExtensions": [
@@ -44,15 +39,17 @@
         {
           "type": "link",
           "value": {
-            "domains": [
-              "*.pinggy.link"
-            ]
+            "domains": ["*.pinggy.link"]
           }
         }
       ]
     }
   ],
-  "validDomains": [
-    "*.pinggy.link"
-  ]
+  "validDomains": ["*.pinggy.link"],
+  "defaultGroupCapability": {
+    "team": "bot",
+    "groupchat": "bot",
+    "meetings": "bot"
+  },
+  "supportsChannelFeatures": "tier1"
 }
