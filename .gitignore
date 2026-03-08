@@ -32,3 +32,6 @@ rpi/
 
 # Environment files
 .env
+*.zip
+*.csv
+jeembot

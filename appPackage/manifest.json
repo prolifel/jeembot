@@ -1,0 +1,58 @@
+{
+  "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.25/MicrosoftTeams.schema.json",
+  "version": "1.0.0",
+  "manifestVersion": "1.25",
+  "id": "08bc5dd7-f534-41e4-933e-a2e5c4324051",
+  "name": {
+    "short": "jeembot"
+  },
+  "developer": {
+    "name": "jeembot",
+    "websiteUrl": "https://gnzif-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link",
+    "privacyUrl": "https://gnzif-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/privacy",
+    "termsOfUseUrl": "https://gnzif-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/tos"
+  },
+  "description": {
+    "short": "jeembot",
+    "full": "jeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembot"
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "accentColor": "#ffffff",
+  "bots": [
+    {
+      "botId": "e09e26fc-9231-4610-b130-f4494c4fb069",
+      "scopes": [
+        "personal",
+        "team",
+        "groupChat"
+      ],
+      "isNotificationOnly": false,
+      "supportsCalling": false,
+      "supportsVideo": false,
+      "supportsFiles": false
+    }
+  ],
+  "composeExtensions": [
+    {
+      "botId": "e09e26fc-9231-4610-b130-f4494c4fb069",
+      "commands": [],
+      "messageHandlers": [
+        {
+          "type": "",
+          "value": {
+            "domains": [
+              "jeembot.com"
+            ],
+            "supportsAnonymizedPayloads": false
+          }
+        }
+      ]
+    }
+  ],
+  "validDomains": [
+    "jeembot.prolifel.com"
+  ]
+}
