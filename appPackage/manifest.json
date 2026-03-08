@@ -8,13 +8,13 @@
   },
   "developer": {
     "name": "jeembot",
-    "websiteUrl": "https://gnzif-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link",
-    "privacyUrl": "https://gnzif-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/privacy",
-    "termsOfUseUrl": "https://gnzif-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/tos"
+    "websiteUrl": "https://npuwv-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link",
+    "privacyUrl": "https://npuwv-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/privacy",
+    "termsOfUseUrl": "https://npuwv-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/tos"
   },
   "description": {
     "short": "jeembot",
-    "full": "jeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembotjeembot"
+    "full": "jeembot is a Teams bot that integrates with ClickUp for task management. It allows users to create, update, and manage tasks directly from Microsoft Teams conversations."
   },
   "icons": {
     "outline": "outline.png",
@@ -32,7 +32,8 @@
       "isNotificationOnly": false,
       "supportsCalling": false,
       "supportsVideo": false,
-      "supportsFiles": false
+      "supportsFiles": false,
+      "supportsChannelFeatures": true
     }
   ],
   "composeExtensions": [
@@ -41,18 +42,17 @@
       "commands": [],
       "messageHandlers": [
         {
-          "type": "",
+          "type": "link",
           "value": {
             "domains": [
-              "jeembot.com"
-            ],
-            "supportsAnonymizedPayloads": false
+              "*.pinggy.link"
+            ]
           }
         }
       ]
     }
   ],
   "validDomains": [
-    "jeembot.prolifel.com"
+    "*.pinggy.link"
   ]
 }
