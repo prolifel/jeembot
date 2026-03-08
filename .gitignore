@@ -36,3 +36,4 @@ rpi/
 *.csv
 jeembot
 *.json
+*.log
