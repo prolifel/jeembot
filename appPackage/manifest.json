@@ -4,16 +4,16 @@
   "manifestVersion": "1.25",
   "id": "08bc5dd7-f534-41e4-933e-a2e5c4324051",
   "name": {
-    "short": "jeembot"
+    "short": "JMBot"
   },
   "developer": {
-    "name": "jeembot",
-    "websiteUrl": "https://nexlr-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link",
-    "privacyUrl": "https://nexlr-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/privacy",
-    "termsOfUseUrl": "https://nexlr-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/tos"
+    "name": "JMBot",
+    "websiteUrl": "https://qinzi-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link",
+    "privacyUrl": "https://qinzi-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/privacy",
+    "termsOfUseUrl": "https://qinzi-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/tos"
   },
   "description": {
-    "short": "jeembot",
+    "short": "Job Master Bot",
     "full": "Teams bot that integrates with ClickUp for task management. It allows users to create, update, and manage tasks directly from Microsoft Teams conversations."
   },
   "icons": {
@@ -39,11 +39,11 @@
             },
             {
               "title": "Help",
-              "description": "Show available commands and how to use Jeembot"
+              "description": "Show available commands and how to use JMBot"
             },
             {
               "title": "Hello",
-              "description": "Get a greeting and quick intro to Jeembot"
+              "description": "Get a greeting and quick intro to JMBot"
             }
           ]
         }
