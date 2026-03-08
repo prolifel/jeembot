@@ -1,11 +1,20 @@
-.PHONY: build push run clean
+.PHONY: build build-linux build-docker push run clean
 
 # Default target registry - override with REGISTRY=your-registry
-REGISTRY ?= jeembot
-IMAGE_NAME ?= teams-webhook
+REGISTRY ?= localhost
+IMAGE_NAME ?= jeembot
 TAG ?= latest
 
+# Build for local machine
 build:
+	go build -o bin/jeembot .
+
+# Build for Linux 64-bit (cross-compilation for RPI/server)
+build-linux:
+	GOOS=linux GOARCH=amd64 go build -o bin/jeembot-linux .
+
+# Build Docker image
+build-docker:
 	docker build -t $(REGISTRY)/$(IMAGE_NAME):$(TAG) .
 
 push:
