@@ -20,7 +20,7 @@
     "outline": "color.png",
     "color": "color.png"
   },
-  "accentColor": "#ffffff",
+  "accentColor": "#3e7bc7",
   "bots": [
     {
       "botId": "e09e26fc-9231-4610-b130-f4494c4fb069",
