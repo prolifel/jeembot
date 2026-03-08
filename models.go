@@ -46,6 +46,8 @@ type Config struct {
 	ClickUpAssigneeCloudSec string
 	ClickUpAssigneeSOC   string
 	TeamsHMACSecret     string
+	TeamsAppID          string
+	TeamsAppSecret      string
 }
 
 // LoadConfig creates Config from environment variables
@@ -63,6 +65,8 @@ func LoadConfig() *Config {
 		ClickUpAssigneeCloudSec: getEnv("CLICKUP_ASSIGNEE_CLOUDSEC", ""),
 		ClickUpAssigneeSOC:   getEnv("CLICKUP_ASSIGNEE_SOC", ""),
 		TeamsHMACSecret:      getEnv("TEAMS_HMAC_SECRET", ""),
+		TeamsAppID:           getEnv("TEAMS_APP_ID", ""),
+		TeamsAppSecret:       getEnv("TEAMS_APP_SECRET", ""),
 	}
 
 	// Validate required configuration
@@ -80,6 +84,14 @@ func LoadConfig() *Config {
 	}
 	if config.ClickUpListSOC == "" {
 		log.Fatal("CLICKUP_LIST_SOC is required")
+	}
+
+	// Bot Framework configuration (required for /api/messages endpoint)
+	if config.TeamsAppID == "" {
+		log.Println("[WARN] TEAMS_APP_ID not set - Bot Framework endpoint will be disabled")
+	}
+	if config.TeamsAppSecret == "" {
+		log.Println("[WARN] TEAMS_APP_SECRET not set - Bot Framework endpoint will be disabled")
 	}
 
 	return config
@@ -142,4 +154,58 @@ type ClickUpTaskResponse struct {
 type ClickUpErrorResponse struct {
 	Err   string `json:"err"`
 	ECode int    `json:"ECode"`
+}
+
+// --- Bot Framework Activity Types ---
+
+// Activity represents a Bot Framework activity
+// https://docs.microsoft.com/en-us/azure/bot-service/rest-api/bot-framework-rest-connector-api-reference?view=azure-bot-service-4.0#activity-object
+type Activity struct {
+	Type         string           `json:"type"`
+	ID           string           `json:"id"`
+	Timestamp    string           `json:"timestamp"`
+	ChannelID    string           `json:"channelId"`
+	ServiceURL   string           `json:"serviceUrl"`
+	From         *ChannelAccount  `json:"from"`
+	Conversation *ConversationAccount `json:"conversation"`
+	Recipient    *ChannelAccount  `json:"recipient"`
+	TextFormat   string           `json:"textFormat"`
+	Text         string           `json:"text"`
+	Attachments  []Attachment     `json:"attachments"`
+	Entities     []Entity         `json:"entities"`
+	ChannelData  interface{}      `json:"channelData"`
+	MembersAdded []*ChannelAccount `json:"membersAdded"`
+}
+
+// ChannelAccount represents a user or bot
+type ChannelAccount struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ConversationAccount represents a conversation
+type ConversationAccount struct {
+	ID string `json:"id"`
+}
+
+// Attachment represents a message attachment
+type Attachment struct {
+	ContentType string      `json:"contentType"`
+	Content     interface{} `json:"content"`
+}
+
+// Entity represents an entity (e.g., mention)
+type Entity struct {
+	Type   string                 `json:"type"`
+	Properties map[string]interface{} `json:"properties"`
+}
+
+// ActivityResponse represents a Bot Framework activity response
+type ActivityResponse struct {
+	Type         string           `json:"type"`
+	Text         string           `json:"text"`
+	From         *ChannelAccount  `json:"from"`
+	Recipient    *ChannelAccount  `json:"recipient"`
+	Conversation *ConversationAccount `json:"conversation"`
+	ChannelID    string           `json:"channelId"`
 }

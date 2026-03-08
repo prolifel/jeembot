@@ -16,7 +16,11 @@ func main() {
 
 	// Set up routes
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", handler.HomePage)
+	mux.HandleFunc("/privacy", handler.PrivacyPage)
+	mux.HandleFunc("/tos", handler.TermsOfServicePage)
 	mux.HandleFunc("/teams/webhook", handler.TeamsWebhook)
+	mux.HandleFunc("/api/messages", handler.BotMessages)
 
 	// Start server with timeouts
 	addr := ":" + config.Port
