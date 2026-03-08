@@ -81,7 +81,7 @@ func (h *Handler) TeamsWebhook(w http.ResponseWriter, r *http.Request) {
 	listID, ok := h.clickup.GetListID(listName)
 	if !ok {
 		log.Printf("[WARN] Invalid list: %s", listName)
-		h.sendResponse(w, "Invalid list. Use: cti, cloudsec, or soc\nExample: jeembot /to cti Your task description")
+		h.sendResponse(w, "Invalid list. Use: cti, cloudsec, or soc\nExample: jmbot /to cti Your task description")
 		return
 	}
 
@@ -178,7 +178,7 @@ func (h *Handler) BotMessages(w http.ResponseWriter, r *http.Request) {
 			log.Printf("[INFO] Bot removed from conversation, scope: %s", scope)
 
 			// Try to send farewell message
-			farewellMessage := "Jeembot has been removed from this conversation. \n\nIf you need to reinstall, just search for Jeembot in the Teams app store. \n\nThanks for using Jeembot! 👋"
+			farewellMessage := "jmbot has been removed from this conversation. \n\nIf you need to reinstall, just search for jmbot in the Teams app store. \n\nThanks for using jmbot! 👋"
 
 			if scope == "personal" {
 				// For personal scope, send farewell directly
@@ -219,7 +219,12 @@ func (h *Handler) handleBotAdded(w http.ResponseWriter, activity *Activity) bool
 	if activity.MembersAdded != nil {
 		botID := h.config.TeamsAppID
 		for _, member := range activity.MembersAdded {
-			if member.ID == botID {
+			// Member ID may have prefix like "28:" - strip it for comparison
+			memberID := member.ID
+			if idx := strings.LastIndex(memberID, ":"); idx >= 0 {
+				memberID = memberID[idx+1:]
+			}
+			if memberID == botID {
 				botAdded = true
 				break
 			}
@@ -232,27 +237,65 @@ func (h *Handler) handleBotAdded(w http.ResponseWriter, activity *Activity) bool
 		scope := getConversationScope(activity)
 		log.Printf("[INFO] Bot added to conversation, scope: %s, source: %s", scope, activity.Type)
 
-		if scope == "personal" {
-			// Personal scope - send welcome directly to the conversation
-			h.sendBotResponse(w, "Welcome to Jeembot! 🎉\n\nI help you create tasks in ClickUp directly from Microsoft Teams.\n\nAvailable commands:\n\n• /to cti <task> - Create task in CTI list\n• /to cloudsec <task> - Create task in CloudSec list\n• /to soc <task> - Create task in SOC list\n\nExample: /to cti Fix login bug\n\nJust type your task and I'll create it for you!", activity)
-		} else {
-			// Team or GroupChat scope - send 1:1 welcome to installer
-			// Get installer info from activity.From
-			installerID := ""
-			installerName := "there"
-			if activity.From != nil {
-				installerID = activity.From.ID
-				installerName = activity.From.Name
-				if installerName == "" {
-					installerName = "there"
-				}
+		// Get installer info from activity.From
+		installerID := ""
+		installerName := "there"
+		if activity.From != nil {
+			installerID = activity.From.ID
+			installerName = activity.From.Name
+			if installerName == "" {
+				installerName = "there"
 			}
+		}
 
-			if installerID != "" {
-				// Send proactive 1:1 message to installer
-				h.sendProactiveWelcomeToUser(w, activity, installerID, installerName, scope)
+		if scope == "personal" {
+			// Personal scope - for conversationUpdate, conversation exists, send directly
+			// For installationUpdate, we need to create a new conversation
+			if isInstallationUpdate && installerID != "" {
+				// Create new 1:1 conversation for installationUpdate
+				tenantID := ""
+				if activity.Conversation != nil {
+					tenantID = activity.Conversation.TenantID
+				}
+				conversationID, err := h.createConversation(installerID, activity.ServiceURL, tenantID)
+				if err != nil {
+					log.Printf("[ERROR] Failed to create 1:1 conversation for personal scope: %v", err)
+					w.WriteHeader(http.StatusOK)
+					return true
+				}
+				// Send welcome message to the new conversation
+				welcomeMsg := "Welcome to jmbot! 🎉\n\nI help you create tasks in ClickUp directly from Microsoft Teams.\n\nAvailable commands:\n\n• /to cti <task> - Create task in CTI list\n• /to cloudsec <task> - Create task in CloudSec list\n• /to soc <task> - Create task in SOC list\n\nExample: /to cti Fix login bug\n\nJust type your task and I'll create it for you!"
+				resp := Activity{
+					Type:         "message",
+					TextFormat:   "plain",
+					From:         activity.Recipient,
+					Conversation: &ConversationAccount{ID: conversationID},
+					ChannelID:    activity.ChannelID,
+					ServiceURL:   activity.ServiceURL,
+					Text:         welcomeMsg,
+				}
+				if err := h.sendToTeams(&resp); err != nil {
+					log.Printf("[ERROR] Failed to send welcome to new personal conversation: %v", err)
+				}
 			} else {
-				log.Printf("[WARN] Could not get installer ID for team scope welcome message")
+				// For conversationUpdate, conversation exists - send directly
+				h.sendBotResponse(w, "Welcome to jmbot! 🎉\n\nI help you create tasks in ClickUp directly from Microsoft Teams.\n\nAvailable commands:\n\n• /to cti <task> - Create task in CTI list\n• /to cloudsec <task> - Create task in CloudSec list\n• /to soc <task> - Create task in SOC list\n\nExample: /to cti Fix login bug\n\nJust type your task and I'll create it for you!", activity)
+			}
+		} else {
+			// Team or GroupChat scope - send welcome to the team channel directly
+			welcomeMsg := fmt.Sprintf("Hi %s! 👋\n\nThanks for adding jmbot to this team! I'm ready to help you create tasks in ClickUp directly from Teams.\n\n**Available commands:**\n• `/to cti <task>` - Create task in CTI list\n• `/to cloudsec <task>` - Create task in CloudSec list\n• `/to soc <task>` - Create task in SOC list\n\n**Example:** `/to cti Fix login bug`\n\nJust type your task and I'll create it for you!", installerName)
+
+			resp := Activity{
+				Type:         "message",
+				TextFormat:   "plain",
+				From:         activity.Recipient,
+				Conversation: &ConversationAccount{ID: activity.Conversation.ID},
+				ChannelID:    activity.ChannelID,
+				ServiceURL:   activity.ServiceURL,
+				Text:         welcomeMsg,
+			}
+			if err := h.sendToTeams(&resp); err != nil {
+				log.Printf("[ERROR] Failed to send welcome to team channel: %v", err)
 			}
 		}
 		return true
@@ -301,8 +344,14 @@ func getConversationScope(activity *Activity) string {
 
 // sendProactiveWelcomeToUser sends a 1:1 welcome message to a user
 func (h *Handler) sendProactiveWelcomeToUser(w http.ResponseWriter, activity *Activity, installerID, installerName, scope string) {
+	// Get tenant ID from conversation
+	tenantID := ""
+	if activity.Conversation != nil {
+		tenantID = activity.Conversation.TenantID
+	}
+
 	// Create a new 1:1 conversation with the installer using the service URL from the activity
-	conversationID, err := h.createConversation(installerID, activity.ServiceURL)
+	conversationID, err := h.createConversation(installerID, activity.ServiceURL, tenantID)
 	if err != nil {
 		log.Printf("[ERROR] Failed to create 1:1 conversation: %v", err)
 		w.WriteHeader(http.StatusOK)
@@ -312,9 +361,9 @@ func (h *Handler) sendProactiveWelcomeToUser(w http.ResponseWriter, activity *Ac
 	// Build welcome message based on scope
 	var welcomeMessage string
 	if scope == "team" {
-		welcomeMessage = fmt.Sprintf("Hi %s! 👋\n\nThanks for adding Jeembot to your team! I've been installed by %s and I'm ready to help you create tasks in ClickUp directly from Teams.\n\n**What I can do:**\n• Create tasks in CTI, CloudSec, or SOC lists\n• Help you track work without leaving Teams\n\n**Available commands:**\n• `/to cti <task>` - Create task in CTI list\n• `/to cloudsec <task>` - Create task in CloudSec list\n• `/to soc <task>` - Create task in SOC list\n\n**Example:** `/to cti Fix login bug`\n\nJust type your task and I'll create it for you in ClickUp!", installerName, installerName)
+		welcomeMessage = fmt.Sprintf("Hi %s! 👋\n\nThanks for adding jmbot to your team! I've been installed by %s and I'm ready to help you create tasks in ClickUp directly from Teams.\n\n**What I can do:**\n• Create tasks in CTI, CloudSec, or SOC lists\n• Help you track work without leaving Teams\n\n**Available commands:**\n• `/to cti <task>` - Create task in CTI list\n• `/to cloudsec <task>` - Create task in CloudSec list\n• `/to soc <task>` - Create task in SOC list\n\n**Example:** `/to cti Fix login bug`\n\nJust type your task and I'll create it for you in ClickUp!", installerName, installerName)
 	} else {
-		welcomeMessage = fmt.Sprintf("Hi %s! 👋\n\nThanks for adding Jeembot to this group chat! I'm ready to help you create tasks in ClickUp directly from Teams.\n\n**Available commands:**\n• `/to cti <task>` - Create task in CTI list\n• `/to cloudsec <task>` - Create task in CloudSec list\n• `/to soc <task>` - Create task in SOC list\n\n**Example:** `/to cti Review security alert`\n\nJust type your task and I'll create it for you!", installerName)
+		welcomeMessage = fmt.Sprintf("Hi %s! 👋\n\nThanks for adding jmbot to this group chat! I'm ready to help you create tasks in ClickUp directly from Teams.\n\n**Available commands:**\n• `/to cti <task>` - Create task in CTI list\n• `/to cloudsec <task>` - Create task in CloudSec list\n• `/to soc <task>` - Create task in SOC list\n\n**Example:** `/to cti Review security alert`\n\nJust type your task and I'll create it for you!", installerName)
 	}
 
 	// Send the welcome message to the new conversation
@@ -336,7 +385,7 @@ func (h *Handler) sendProactiveWelcomeToUser(w http.ResponseWriter, activity *Ac
 }
 
 // createConversation creates a new 1:1 conversation with a user
-func (h *Handler) createConversation(userID, serviceURL string) (string, error) {
+func (h *Handler) createConversation(userID, serviceURL, tenantID string) (string, error) {
 	if serviceURL == "" {
 		return "", fmt.Errorf("no service URL provided")
 	}
@@ -350,11 +399,11 @@ func (h *Handler) createConversation(userID, serviceURL string) (string, error) 
 	// Build the Bot Framework API URL for creating conversations
 	apiURL := strings.TrimRight(serviceURL, "/")
 
-	// Create conversation request
+	// Create conversation request with tenant data
 	convReq := struct {
-		Bot         *ChannelAccount  `json:"bot"`
-		Members     []ChannelAccount `json:"members"`
-		ChannelData interface{}      `json:"channelData,omitempty"`
+		Bot         *ChannelAccount        `json:"bot"`
+		Members     []ChannelAccount       `json:"members"`
+		ChannelData map[string]interface{} `json:"channelData,omitempty"`
 	}{
 		Bot: &ChannelAccount{
 			ID: h.config.TeamsAppID,
@@ -364,12 +413,19 @@ func (h *Handler) createConversation(userID, serviceURL string) (string, error) 
 		},
 	}
 
+	// Add tenant data if available
+	if tenantID != "" {
+		convReq.ChannelData = map[string]interface{}{
+			"tenant": map[string]string{"id": tenantID},
+		}
+	}
+
 	body, err := json.Marshal(convReq)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal conversation request: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/conversations", apiURL)
+	url := fmt.Sprintf("%s/v3/conversations", apiURL)
 	log.Printf("[DEBUG] Creating conversation with: %s", url)
 
 	client := &http.Client{Timeout: 30 * time.Second}
@@ -406,10 +462,16 @@ func (h *Handler) createConversation(userID, serviceURL string) (string, error) 
 
 // sendProactiveFarewellToUser sends a 1:1 farewell message when bot is removed
 func (h *Handler) sendProactiveFarewellToUser(w http.ResponseWriter, activity *Activity, installerID string) {
-	farewellMessage := "Jeembot has been removed from a team or group chat. \n\nIf you need to reinstall, just search for Jeembot in the Teams app store. \n\nThanks for using Jeembot! 👋"
+	farewellMessage := "jmbot has been removed from a team or group chat. \n\nIf you need to reinstall, just search for jmbot in the Teams app store. \n\nThanks for using jmbot! 👋"
+
+	// Get tenant ID from conversation
+	tenantID := ""
+	if activity.Conversation != nil {
+		tenantID = activity.Conversation.TenantID
+	}
 
 	// Create a new 1:1 conversation with the installer
-	conversationID, err := h.createConversation(installerID, activity.ServiceURL)
+	conversationID, err := h.createConversation(installerID, activity.ServiceURL, tenantID)
 	if err != nil {
 		log.Printf("[ERROR] Failed to create 1:1 conversation for farewell: %v", err)
 		w.WriteHeader(http.StatusOK)
@@ -434,7 +496,7 @@ func (h *Handler) sendProactiveFarewellToUser(w http.ResponseWriter, activity *A
 	w.WriteHeader(http.StatusOK)
 }
 
-// stripMentionTags removes Teams mention tags like <at>jeembot</at> from message text
+// stripMentionTags removes Teams mention tags like <at>jmbot</at> from message text
 func stripMentionTags(text string) string {
 	// Remove <at>...</at> pattern used by Teams for bot mentions
 	re := regexp.MustCompile(`<at[^>]*>.*?</at>`)
@@ -443,22 +505,22 @@ func stripMentionTags(text string) string {
 
 // handleBotMessage processes a message activity from Teams
 func (h *Handler) handleBotMessage(w http.ResponseWriter, activity *Activity) {
-	// Strip Teams mention tags (e.g., <at>jeembot</at>) from message text
+	// Strip Teams mention tags (e.g., <at>jmbot</at>) from message text
 	cleanText := stripMentionTags(activity.Text)
 
 	// Check for greeting commands first
 	text := strings.TrimSpace(strings.ToLower(cleanText))
 	if text == "hi" || text == "hello" || text == "hello!" {
-		h.sendBotResponse(w, "Hello! I'm Jeembot!\n\nI help you create tasks in ClickUp without leaving Teams.\n\nUse /to <list> <task> to create tasks:\n\n• /to cti <task> - CTI team\n\n• /to cloudsec <task> - CloudSec team\n\n• /to soc <task> - SOC team\n\nExample: /to cti Review security alert", activity)
+		h.sendBotResponse(w, "Hello! I'm jmbot!\n\nI help you create tasks in ClickUp without leaving Teams.\n\nUse /to <list> <task> to create tasks:\n\n• /to cti <task> - CTI team\n\n• /to cloudsec <task> - CloudSec team\n\n• /to soc <task> - SOC team\n\nExample: /to cti Review security alert", activity)
 		return
 	}
 	if text == "help" {
-		h.sendBotResponse(w, "Jeembot Help\n\nCreate tasks in ClickUp using:\n\n/to <team> <task description>\n\nTeams:\n\n• cti - CTI team\n\n• cloudsec - CloudSec team\n\n• soc - SOC team\n\nExamples:\n\n• /to cti Update firewall rules\n\n• /to cloudsec Review access request\n\n• /to soc Investigate alert #123\n\nNeed help? Just ask!", activity)
+		h.sendBotResponse(w, "jmbot Help\n\nCreate tasks in ClickUp using:\n\n/to <team> <task description>\n\nTeams:\n\n• cti - CTI team\n\n• cloudsec - CloudSec team\n\n• soc - SOC team\n\nExamples:\n\n• /to cti Update firewall rules\n\n• /to cloudsec Review access request\n\n• /to soc Investigate alert #123\n\nNeed help? Just ask!", activity)
 		return
 	}
 	// Handle "Create Task" command from manifest commandList
 	if text == "create task" || text == "create task!" {
-		h.sendBotResponse(w, "📝 Create a New Task in ClickUp\n\nI can create tasks in three different team lists:\n\n**Available Lists:**\n• **CTI** - CTI team tasks\n• **CloudSec** - CloudSec team tasks\n• **SOC** - SOC team tasks\n\n**How to Use:**\n`/to <list> <your task>`\n\n**Examples:**\n• `/to cti Review security alert`\n• `/to cloudsec Update firewall rules`\n• `/to soc Investigate alert #123`\n\nJust type your task and I'll create it for you!", activity)
+		h.sendBotResponse(w, "📝 Create a New Task in ClickUp\n\nI can create tasks in three different team lists:\n\n**Available Lists:**\n\n• **CTI** - CTI team tasks\n\n• **CloudSec** - CloudSec team tasks\n\n• **SOC** - SOC team tasks\n\n**How to Use:**\n\n`/to <list> <your task>`\n\n**Examples:**\n\n• `/to cti Review security alert`\n\n• `/to cloudsec Update firewall rules`\n\n• `/to soc Investigate alert #123`\n\nJust type your task and I'll create it for you!", activity)
 		return
 	}
 
@@ -757,7 +819,7 @@ func computeHMAC(message, secret string) string {
 }
 
 // cleanHTML removes HTML tags and decodes common HTML entities
-// Handles Teams webhook HTML format: "<p><at>jeembot</at>&nbsp;/to cloudsec hello world</p>"
+// Handles Teams webhook HTML format: "<p><at>jmbot</at>&nbsp;/to cloudsec hello world</p>"
 func cleanHTML(text string) string {
 	// Replace common HTML entities
 	text = strings.ReplaceAll(text, "&nbsp;", " ")
@@ -792,39 +854,39 @@ func cleanHTML(text string) string {
 }
 
 // parseCommand parses the Teams message text to extract list and task detail
-// Expected format: jeembot /to <list> <task detail>
-// Handles HTML format: "<p><at>jeembot</at>&nbsp;/to cloudsec hello world</p>"
+// Expected format: jmbot /to <list> <task detail>
+// Handles HTML format: "<p><at>jmbot</at>&nbsp;/to cloudsec hello world</p>"
 func parseCommand(text string) (listName, taskDetail string, err error) {
 	// Clean HTML: strip tags and decode entities
 	text = cleanHTML(text)
 
 	log.Printf("[DEBUG] Text: %s", text)
 
-	// Find jeembot mention (case-insensitive)
+	// Find jmbot mention (case-insensitive)
 	text = strings.ToLower(text)
-	mentionIdx := strings.Index(text, "jeembot")
+	mentionIdx := strings.Index(text, "jmbot")
 	if mentionIdx == -1 {
-		return "", "", fmt.Errorf("Invalid syntax. Use: jeembot /to <cti|cloudsec|soc> <task detail>")
+		return "", "", fmt.Errorf("Invalid syntax. Use: jmbot /to <cti|cloudsec|soc> <task detail>")
 	}
 
 	// Extract text after mention
-	afterMention := strings.TrimSpace(text[mentionIdx+len("jeembot"):])
+	afterMention := strings.TrimSpace(text[mentionIdx+len("jmbot"):])
 
 	// Split by whitespace
 	parts := strings.Fields(afterMention)
 	if len(parts) < 2 {
-		return "", "", fmt.Errorf("Invalid syntax. Use: jeembot /to <cti|cloudsec|soc> <task detail>")
+		return "", "", fmt.Errorf("Invalid syntax. Use: jmbot /to <cti|cloudsec|soc> <task detail>")
 	}
 
 	// Check for /to command
 	if parts[0] != "/to" {
-		return "", "", fmt.Errorf("Invalid syntax. Use: jeembot /to <cti|cloudsec|soc> <task detail>")
+		return "", "", fmt.Errorf("Invalid syntax. Use: jmbot /to <cti|cloudsec|soc> <task detail>")
 	}
 
 	// Validate list name
 	listName = parts[1]
 	if listName != "cti" && listName != "cloudsec" && listName != "soc" {
-		return "", "", fmt.Errorf("Invalid list. Use: cti, cloudsec, or soc\nExample: jeembot /to cti Your task description")
+		return "", "", fmt.Errorf("Invalid list. Use: cti, cloudsec, or soc\nExample: jmbot /to cti Your task description")
 	}
 
 	// Get remaining parts as task detail
@@ -979,12 +1041,12 @@ func createAdaptiveCard(message string) AdaptiveCard {
 			Type: "Container",
 			Items: []CardElement{
 				{
-					Type:        "TextBlock",
-					Text:        "You can now assign this task, add due dates, or update priorities directly in ClickUp.",
-					Wrap:        true,
-					IsSubtle:    true,
-					Size:        "small",
-					Spacing:     "medium",
+					Type:     "TextBlock",
+					Text:     "You can now assign this task, add due dates, or update priorities directly in ClickUp.",
+					Wrap:     true,
+					IsSubtle: true,
+					Size:     "small",
+					Spacing:  "medium",
 				},
 			},
 		})
@@ -1029,7 +1091,7 @@ func createAdaptiveCard(message string) AdaptiveCard {
 							Items: []CardElement{
 								{
 									Type:                "TextBlock",
-									Text:                "Welcome to Jeembot",
+									Text:                "Welcome to jmbot",
 									Weight:              "bolder",
 									Size:                "large",
 									HorizontalAlignment: "left",
@@ -1078,21 +1140,21 @@ type TeamsClaims struct {
 func (h *Handler) HomePage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`<html><body><h1>Jeembot</h1><p>ClickUp integration for Microsoft Teams</p></body></html>`))
+	w.Write([]byte(`<html><body><h1>jmbot</h1><p>ClickUp integration for Microsoft Teams</p></body></html>`))
 }
 
 // PrivacyPage serves the privacy policy page
 func (h *Handler) PrivacyPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`<html><body><h1>Privacy Policy</h1><p>Jeembot stores only task data necessary for ClickUp integration.</p></body></html>`))
+	w.Write([]byte(`<html><body><h1>Privacy Policy</h1><p>jmbot stores only task data necessary for ClickUp integration.</p></body></html>`))
 }
 
 // TermsOfServicePage serves the terms of service page
 func (h *Handler) TermsOfServicePage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`<html><body><h1>Terms of Service</h1><p>By using Jeembot, you agree to use it in accordance with applicable laws.</p></body></html>`))
+	w.Write([]byte(`<html><body><h1>Terms of Service</h1><p>By using jmbot, you agree to use it in accordance with applicable laws.</p></body></html>`))
 }
 
 // validateJWT validates the JWT token from the Authorization header
