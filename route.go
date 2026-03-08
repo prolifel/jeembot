@@ -166,7 +166,37 @@ func (h *Handler) BotMessages(w http.ResponseWriter, r *http.Request) {
 	case "installationUpdate":
 		// Handle bot installation/uninstallation in Teams
 		// This is sent when bot is added/removed from a team or chat
-		log.Printf("[DEBUG] InstallationUpdate activity received")
+		log.Printf("[DEBUG] InstallationUpdate activity received, action: %s", activity.Action)
+
+		if activity.Action == "add" {
+			// Bot was installed - send welcome message
+			h.handleBotAdded(w, &activity)
+			return
+		} else if activity.Action == "remove" {
+			// Bot was uninstalled - send farewell message if possible
+			scope := getConversationScope(&activity)
+			log.Printf("[INFO] Bot removed from conversation, scope: %s", scope)
+
+			// Try to send farewell message
+			farewellMessage := "Jeembot has been removed from this conversation. \n\nIf you need to reinstall, just search for Jeembot in the Teams app store. \n\nThanks for using Jeembot! 👋"
+
+			if scope == "personal" {
+				// For personal scope, send farewell directly
+				h.sendBotResponse(w, farewellMessage, &activity)
+				return
+			} else {
+				// For team/groupChat, try to send 1:1 to installer
+				installerID := ""
+				if activity.From != nil {
+					installerID = activity.From.ID
+				}
+				if installerID != "" {
+					// Try to send 1:1 farewell message
+					h.sendProactiveFarewellToUser(w, &activity, installerID)
+					return
+				}
+			}
+		}
 		w.WriteHeader(http.StatusOK)
 	case "ping":
 		// Handle ping from Bot Framework
@@ -179,22 +209,229 @@ func (h *Handler) BotMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleBotAdded processes when bot is added to a conversation
+// Handles both conversationUpdate (membersAdded) and installationUpdate (action=add)
 func (h *Handler) handleBotAdded(w http.ResponseWriter, activity *Activity) bool {
-	// Check if membersAdded contains our bot
-	if activity.MembersAdded == nil {
-		return false
-	}
+	// Check if this is an installationUpdate with action=add
+	isInstallationUpdate := activity.Type == "installationUpdate" && activity.Action == "add"
 
-	botID := h.config.TeamsAppID
-	for _, member := range activity.MembersAdded {
-		if member.ID == botID {
-			// Bot was added - send welcome message with Adaptive Card
-			log.Printf("[INFO] Bot added to conversation, sending welcome message")
-			h.sendBotResponse(w, "Welcome to Jeembot! 🎉\n\nI help you create tasks in ClickUp directly from Microsoft Teams.\n\nAvailable commands:\n• /to cti <task> - Create task in CTI list\n• /to cloudsec <task> - Create task in CloudSec list\n• /to soc <task> - Create task in SOC list\n\nExample: /to cti Fix login bug\n\nJust type your task and I'll create it for you!", activity)
-			return true
+	// Check if membersAdded contains our bot (for conversationUpdate)
+	botAdded := false
+	if activity.MembersAdded != nil {
+		botID := h.config.TeamsAppID
+		for _, member := range activity.MembersAdded {
+			if member.ID == botID {
+				botAdded = true
+				break
+			}
 		}
 	}
+
+	// Process if bot was added via either method
+	if botAdded || isInstallationUpdate {
+		// Bot was added - determine conversation scope
+		scope := getConversationScope(activity)
+		log.Printf("[INFO] Bot added to conversation, scope: %s, source: %s", scope, activity.Type)
+
+		if scope == "personal" {
+			// Personal scope - send welcome directly to the conversation
+			h.sendBotResponse(w, "Welcome to Jeembot! 🎉\n\nI help you create tasks in ClickUp directly from Microsoft Teams.\n\nAvailable commands:\n\n• /to cti <task> - Create task in CTI list\n• /to cloudsec <task> - Create task in CloudSec list\n• /to soc <task> - Create task in SOC list\n\nExample: /to cti Fix login bug\n\nJust type your task and I'll create it for you!", activity)
+		} else {
+			// Team or GroupChat scope - send 1:1 welcome to installer
+			// Get installer info from activity.From
+			installerID := ""
+			installerName := "there"
+			if activity.From != nil {
+				installerID = activity.From.ID
+				installerName = activity.From.Name
+				if installerName == "" {
+					installerName = "there"
+				}
+			}
+
+			if installerID != "" {
+				// Send proactive 1:1 message to installer
+				h.sendProactiveWelcomeToUser(w, activity, installerID, installerName, scope)
+			} else {
+				log.Printf("[WARN] Could not get installer ID for team scope welcome message")
+			}
+		}
+		return true
+	}
 	return false
+}
+
+// getConversationScope returns the scope of the conversation: "personal", "team", or "groupChat"
+func getConversationScope(activity *Activity) string {
+	// First check ConversationType from the conversation account
+	if activity.Conversation != nil && activity.Conversation.ConversationType != "" {
+		convType := activity.Conversation.ConversationType
+		// Map Teams-specific conversation types
+		if convType == "channel" {
+			return "team"
+		}
+		return convType
+	}
+
+	// Then check Teams-specific channel data
+	if activity.ChannelData != nil {
+		// Try to marshal and unmarshal as TeamsChannelData
+		data, err := json.Marshal(activity.ChannelData)
+		if err == nil {
+			var teamsData TeamsChannelData
+			if err := json.Unmarshal(data, &teamsData); err == nil {
+				// If we have team info, it's a team scope
+				if teamsData.Team != nil {
+					return "team"
+				}
+				// Check chatType
+				if teamsData.ChatType != "" {
+					chatType := teamsData.ChatType
+					if chatType == "channel" {
+						return "team"
+					}
+					return chatType
+				}
+			}
+		}
+	}
+
+	// Default to personal if we can't determine
+	return "personal"
+}
+
+// sendProactiveWelcomeToUser sends a 1:1 welcome message to a user
+func (h *Handler) sendProactiveWelcomeToUser(w http.ResponseWriter, activity *Activity, installerID, installerName, scope string) {
+	// Create a new 1:1 conversation with the installer using the service URL from the activity
+	conversationID, err := h.createConversation(installerID, activity.ServiceURL)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create 1:1 conversation: %v", err)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Build welcome message based on scope
+	var welcomeMessage string
+	if scope == "team" {
+		welcomeMessage = fmt.Sprintf("Hi %s! 👋\n\nThanks for adding Jeembot to your team! I've been installed by %s and I'm ready to help you create tasks in ClickUp directly from Teams.\n\n**What I can do:**\n• Create tasks in CTI, CloudSec, or SOC lists\n• Help you track work without leaving Teams\n\n**Available commands:**\n• `/to cti <task>` - Create task in CTI list\n• `/to cloudsec <task>` - Create task in CloudSec list\n• `/to soc <task>` - Create task in SOC list\n\n**Example:** `/to cti Fix login bug`\n\nJust type your task and I'll create it for you in ClickUp!", installerName, installerName)
+	} else {
+		welcomeMessage = fmt.Sprintf("Hi %s! 👋\n\nThanks for adding Jeembot to this group chat! I'm ready to help you create tasks in ClickUp directly from Teams.\n\n**Available commands:**\n• `/to cti <task>` - Create task in CTI list\n• `/to cloudsec <task>` - Create task in CloudSec list\n• `/to soc <task>` - Create task in SOC list\n\n**Example:** `/to cti Review security alert`\n\nJust type your task and I'll create it for you!", installerName)
+	}
+
+	// Send the welcome message to the new conversation
+	resp := Activity{
+		Type:         "message",
+		TextFormat:   "plain",
+		From:         activity.Recipient,
+		Conversation: &ConversationAccount{ID: conversationID},
+		ChannelID:    activity.ChannelID,
+		ServiceURL:   activity.ServiceURL,
+		Text:         welcomeMessage,
+	}
+
+	if err := h.sendToTeams(&resp); err != nil {
+		log.Printf("[ERROR] Failed to send proactive welcome: %v", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// createConversation creates a new 1:1 conversation with a user
+func (h *Handler) createConversation(userID, serviceURL string) (string, error) {
+	if serviceURL == "" {
+		return "", fmt.Errorf("no service URL provided")
+	}
+
+	// Get OAuth token
+	token, err := h.getBotToken()
+	if err != nil {
+		return "", fmt.Errorf("failed to get bot token: %w", err)
+	}
+
+	// Build the Bot Framework API URL for creating conversations
+	apiURL := strings.TrimRight(serviceURL, "/")
+
+	// Create conversation request
+	convReq := struct {
+		Bot         *ChannelAccount  `json:"bot"`
+		Members     []ChannelAccount `json:"members"`
+		ChannelData interface{}      `json:"channelData,omitempty"`
+	}{
+		Bot: &ChannelAccount{
+			ID: h.config.TeamsAppID,
+		},
+		Members: []ChannelAccount{
+			{ID: userID},
+		},
+	}
+
+	body, err := json.Marshal(convReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal conversation request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/conversations", apiURL)
+	log.Printf("[DEBUG] Creating conversation with: %s", url)
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("Teams API returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	// Parse response to get conversation ID
+	var convResp struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&convResp); err != nil {
+		return "", fmt.Errorf("failed to parse conversation response: %w", err)
+	}
+
+	log.Printf("[DEBUG] Created conversation: %s", convResp.ID)
+	return convResp.ID, nil
+}
+
+// sendProactiveFarewellToUser sends a 1:1 farewell message when bot is removed
+func (h *Handler) sendProactiveFarewellToUser(w http.ResponseWriter, activity *Activity, installerID string) {
+	farewellMessage := "Jeembot has been removed from a team or group chat. \n\nIf you need to reinstall, just search for Jeembot in the Teams app store. \n\nThanks for using Jeembot! 👋"
+
+	// Create a new 1:1 conversation with the installer
+	conversationID, err := h.createConversation(installerID, activity.ServiceURL)
+	if err != nil {
+		log.Printf("[ERROR] Failed to create 1:1 conversation for farewell: %v", err)
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	// Send the farewell message to the new conversation
+	resp := Activity{
+		Type:         "message",
+		TextFormat:   "plain",
+		From:         activity.Recipient,
+		Conversation: &ConversationAccount{ID: conversationID},
+		ChannelID:    activity.ChannelID,
+		ServiceURL:   activity.ServiceURL,
+		Text:         farewellMessage,
+	}
+
+	if err := h.sendToTeams(&resp); err != nil {
+		log.Printf("[ERROR] Failed to send farewell message: %v", err)
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 // stripMentionTags removes Teams mention tags like <at>jeembot</at> from message text
@@ -211,12 +448,17 @@ func (h *Handler) handleBotMessage(w http.ResponseWriter, activity *Activity) {
 
 	// Check for greeting commands first
 	text := strings.TrimSpace(strings.ToLower(cleanText))
-	if text == "hi" || text == "hello" {
-		h.sendBotResponse(w, "Hello! I'm Jeembot!\n\nI help you create tasks in ClickUp without leaving Teams.\n\nUse /to <list> <task> to create tasks:\n• /to cti <task> - CTI team\n• /to cloudsec <task> - CloudSec team\n• /to soc <task> - SOC team\n\nExample: /to cti Review security alert", activity)
+	if text == "hi" || text == "hello" || text == "hello!" {
+		h.sendBotResponse(w, "Hello! I'm Jeembot!\n\nI help you create tasks in ClickUp without leaving Teams.\n\nUse /to <list> <task> to create tasks:\n\n• /to cti <task> - CTI team\n\n• /to cloudsec <task> - CloudSec team\n\n• /to soc <task> - SOC team\n\nExample: /to cti Review security alert", activity)
 		return
 	}
 	if text == "help" {
-		h.sendBotResponse(w, "Jeembot Help\n\nCreate tasks in ClickUp using:\n/to <team> <task description>\n\nTeams:\n• cti - CTI team\n• cloudsec - CloudSec team\n• soc - SOC team\n\nExamples:\n• /to cti Update firewall rules\n• /to cloudsec Review access request\n• /to soc Investigate alert #123\n\nNeed help? Just ask!", activity)
+		h.sendBotResponse(w, "Jeembot Help\n\nCreate tasks in ClickUp using:\n\n/to <team> <task description>\n\nTeams:\n\n• cti - CTI team\n\n• cloudsec - CloudSec team\n\n• soc - SOC team\n\nExamples:\n\n• /to cti Update firewall rules\n\n• /to cloudsec Review access request\n\n• /to soc Investigate alert #123\n\nNeed help? Just ask!", activity)
+		return
+	}
+	// Handle "Create Task" command from manifest commandList
+	if text == "create task" || text == "create task!" {
+		h.sendBotResponse(w, "📝 Create a New Task in ClickUp\n\nI can create tasks in three different team lists:\n\n**Available Lists:**\n• **CTI** - CTI team tasks\n• **CloudSec** - CloudSec team tasks\n• **SOC** - SOC team tasks\n\n**How to Use:**\n`/to <list> <your task>`\n\n**Examples:**\n• `/to cti Review security alert`\n• `/to cloudsec Update firewall rules`\n• `/to soc Investigate alert #123`\n\nJust type your task and I'll create it for you!", activity)
 		return
 	}
 
@@ -337,6 +579,7 @@ func (h *Handler) sendBotResponse(w http.ResponseWriter, message string, activit
 }
 
 // sendToTeams sends an activity to Teams via the Bot Framework API
+// Includes retry logic for transient network failures
 func (h *Handler) sendToTeams(activity *Activity) error {
 	if activity.ServiceURL == "" {
 		return fmt.Errorf("no service URL available")
@@ -357,37 +600,56 @@ func (h *Handler) sendToTeams(activity *Activity) error {
 
 	log.Printf("[DEBUG] Sending response to Teams: %s", url)
 
-	// Create HTTP client with timeout
-	client := &http.Client{Timeout: 10 * time.Second}
-
-	// Encode the activity
+	// Encode the activity once (for retries)
 	body, err := json.Marshal(activity)
 	if err != nil {
 		return fmt.Errorf("failed to marshal activity: %w", err)
 	}
 
-	// Create request
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+	// Retry up to 2 times with exponential backoff for transient errors
+	maxRetries := 2
+	var lastErr error
+
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 1s, 2s
+			backoff := time.Duration(1<<uint(attempt-1)) * time.Second
+			log.Printf("[DEBUG] Retry attempt %d after %v", attempt, backoff)
+			time.Sleep(backoff)
+		}
+
+		// Create HTTP client with timeout
+		client := &http.Client{Timeout: 30 * time.Second}
+
+		// Create request
+		req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+		if err != nil {
+			return fmt.Errorf("failed to create request: %w", err)
+		}
+
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to send request: %w", err)
+			log.Printf("[WARN] Attempt %d failed: %v", attempt+1, err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode >= 400 {
+			respBody, _ := io.ReadAll(resp.Body)
+			lastErr = fmt.Errorf("Teams API returned status %d: %s", resp.StatusCode, string(respBody))
+			log.Printf("[WARN] Attempt %d failed: %v", attempt+1, lastErr)
+			continue
+		}
+
+		log.Printf("[DEBUG] Response sent to Teams successfully")
+		return nil
 	}
 
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+token)
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to send request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf(" Teams API returned status %d: %s", resp.StatusCode, string(respBody))
-	}
-
-	log.Printf("[DEBUG] Response sent to Teams successfully")
-	return nil
+	return fmt.Errorf("failed after %d attempts: %w", maxRetries+1, lastErr)
 }
 
 // getBotToken obtains an OAuth token from Azure AD for Bot Framework
@@ -411,7 +673,7 @@ func (h *Handler) getBotToken() (string, error) {
 
 	log.Printf("[DEBUG] Getting bot OAuth token")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := &http.Client{Timeout: 30 * time.Second}
 	resp, err := client.PostForm(tokenURL, formData)
 	if err != nil {
 		return "", fmt.Errorf("failed to get token: %w", err)
@@ -595,7 +857,7 @@ func (h *Handler) sendResponse(w http.ResponseWriter, message string) {
 
 	// Only send Adaptive Card without plain text to avoid duplication in Teams
 	resp := TeamsResponse{
-		Type:        "message",
+		Type: "message",
 		Attachments: []Attachment{
 			{
 				ContentType: "application/vnd.microsoft.card.adaptive",
@@ -645,9 +907,9 @@ func createAdaptiveCard(message string) AdaptiveCard {
 			}
 		}
 
-		// Build well-formatted card
+		// Build well-formatted card with extended description
 		card.Body = append(card.Body, CardElement{
-			Type:  "Container",
+			Type: "Container",
 			Items: []CardElement{
 				{
 					Type: "ColumnSet",
@@ -668,19 +930,19 @@ func createAdaptiveCard(message string) AdaptiveCard {
 							Width: "stretch",
 							Items: []CardElement{
 								{
-									Type:             "TextBlock",
-									Text:             "Task Created",
-									Weight:           "bolder",
-									Size:             "medium",
-									Color:            "good",
+									Type:                "TextBlock",
+									Text:                "Task Created Successfully!",
+									Weight:              "bolder",
+									Size:                "medium",
+									Color:               "good",
 									HorizontalAlignment: "left",
 								},
 								{
-									Type:             "TextBlock",
-									Text:             "Your task has been created in ClickUp",
-									IsSubtle:         true,
+									Type:                "TextBlock",
+									Text:                "Your task has been created and saved in ClickUp",
+									IsSubtle:            true,
 									HorizontalAlignment: "left",
-									Size:             "small",
+									Size:                "small",
 								},
 							},
 						},
@@ -691,21 +953,38 @@ func createAdaptiveCard(message string) AdaptiveCard {
 
 		// Add task details in a styled container
 		card.Body = append(card.Body, CardElement{
-			Type: "Container",
+			Type:  "Container",
 			Style: "emphasis",
 			Items: []CardElement{
 				{
-					Type:  "TextBlock",
-					Text:  "📝 " + taskName,
-					Wrap:  true,
+					Type:   "TextBlock",
+					Text:   "📝 " + taskName,
+					Wrap:   true,
 					Weight: "bolder",
-					Size:  "medium",
+					Size:   "medium",
 				},
 				{
-					Type:  "FactSet",
+					Type: "FactSet",
 					Facts: []Fact{
 						{Title: "List:", Value: listName},
+						{Title: "Status:", Value: "Open"},
+						{Title: "Priority:", Value: "Normal"},
 					},
+				},
+			},
+		})
+
+		// Add helpful next steps text
+		card.Body = append(card.Body, CardElement{
+			Type: "Container",
+			Items: []CardElement{
+				{
+					Type:        "TextBlock",
+					Text:        "You can now assign this task, add due dates, or update priorities directly in ClickUp.",
+					Wrap:        true,
+					IsSubtle:    true,
+					Size:        "small",
+					Spacing:     "medium",
 				},
 			},
 		})
@@ -717,6 +996,11 @@ func createAdaptiveCard(message string) AdaptiveCard {
 					Type:  "Action.OpenUrl",
 					Title: "🔗 Open in ClickUp",
 					URL:   taskURL,
+				},
+				{
+					Type:  "Action.OpenUrl",
+					Title: "📋 View All Tasks",
+					URL:   "https://app.clickup.com",
 				},
 			}
 		}
@@ -744,10 +1028,10 @@ func createAdaptiveCard(message string) AdaptiveCard {
 							Width: "stretch",
 							Items: []CardElement{
 								{
-									Type:             "TextBlock",
-									Text:             "Welcome to Jeembot",
-									Weight:           "bolder",
-									Size:             "large",
+									Type:                "TextBlock",
+									Text:                "Welcome to Jeembot",
+									Weight:              "bolder",
+									Size:                "large",
 									HorizontalAlignment: "left",
 								},
 							},
@@ -755,9 +1039,9 @@ func createAdaptiveCard(message string) AdaptiveCard {
 					},
 				},
 				{
-					Type:  "TextBlock",
-					Text:  message,
-					Wrap:  true,
+					Type:    "TextBlock",
+					Text:    message,
+					Wrap:    true,
 					Spacing: "medium",
 				},
 			},
@@ -768,10 +1052,10 @@ func createAdaptiveCard(message string) AdaptiveCard {
 			Type: "Container",
 			Items: []CardElement{
 				{
-					Type:  "TextBlock",
-					Text:  message,
-					Wrap:  true,
-					Size:  "medium",
+					Type: "TextBlock",
+					Text: message,
+					Wrap: true,
+					Size: "medium",
 				},
 			},
 		})
