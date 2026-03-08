@@ -123,7 +123,14 @@ type TeamsUser struct {
 
 // TeamsChannelData contains channel information
 type TeamsChannelData struct {
-	Channel *TeamsChannel `json:"channel"`
+	Channel   *TeamsChannel `json:"channel,omitempty"`
+	ChatType  string        `json:"chatType,omitempty"` // "personal", "groupChat", "meeting"
+	Team      *TeamsTeam    `json:"team,omitempty"`
+}
+
+// TeamsTeam represents a Teams team
+type TeamsTeam struct {
+	ID string `json:"id"`
 }
 
 // TeamsChannel represents a Teams channel
@@ -178,6 +185,7 @@ type Activity struct {
 	Entities     []Entity         `json:"entities"`
 	ChannelData  interface{}      `json:"channelData"`
 	MembersAdded []*ChannelAccount `json:"membersAdded"`
+	Action       string           `json:"action,omitempty"` // For installationUpdate: "add" or "remove"
 }
 
 // ChannelAccount represents a user or bot
@@ -188,7 +196,10 @@ type ChannelAccount struct {
 
 // ConversationAccount represents a conversation
 type ConversationAccount struct {
-	ID string `json:"id"`
+	ID               string `json:"id"`
+	ConversationType string `json:"conversationType,omitempty"` // "personal", "groupChat", "channel"
+	IsGroup          bool   `json:"isGroup,omitempty"`
+	TenantID         string `json:"tenantId,omitempty"`
 }
 
 // Attachment represents a message attachment
