@@ -17,7 +17,7 @@
     "full": "Teams bot that integrates with ClickUp for task management. It allows users to create, update, and manage tasks directly from Microsoft Teams conversations."
   },
   "icons": {
-    "outline": "outline.png",
+    "outline": "color.png",
     "color": "color.png"
   },
   "accentColor": "#ffffff",
