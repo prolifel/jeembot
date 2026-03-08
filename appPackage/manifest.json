@@ -8,9 +8,9 @@
   },
   "developer": {
     "name": "jeembot",
-    "websiteUrl": "https://cqxem-182-253-48-39.a.free.pinggy.link",
-    "privacyUrl": "https://cqxem-182-253-48-39.a.free.pinggy.link/privacy",
-    "termsOfUseUrl": "https://cqxem-182-253-48-39.a.free.pinggy.link/tos"
+    "websiteUrl": "https://nexlr-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link",
+    "privacyUrl": "https://nexlr-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/privacy",
+    "termsOfUseUrl": "https://nexlr-2404-8000-1096-4153-a99f-ae7-dad8-cbb7.a.free.pinggy.link/tos"
   },
   "description": {
     "short": "jeembot",
@@ -28,7 +28,26 @@
       "isNotificationOnly": false,
       "supportsCalling": false,
       "supportsVideo": false,
-      "supportsFiles": false
+      "supportsFiles": false,
+      "commandLists": [
+        {
+          "scopes": ["personal", "team", "groupChat"],
+          "commands": [
+            {
+              "title": "Create Task",
+              "description": "Create a new task in ClickUp. Usage: /to <team> <task description>"
+            },
+            {
+              "title": "Help",
+              "description": "Show available commands and how to use Jeembot"
+            },
+            {
+              "title": "Hello",
+              "description": "Get a greeting and quick intro to Jeembot"
+            }
+          ]
+        }
+      ]
     }
   ],
   "composeExtensions": [
