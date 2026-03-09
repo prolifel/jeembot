@@ -2,8 +2,11 @@
 
 # Default target registry - override with REGISTRY=your-registry
 REGISTRY ?= localhost
-IMAGE_NAME ?= jeembot
+IMAGE_NAME ?= cr.prolifel.com/jeembot
 TAG ?= latest
+DOCKERFILE = Dockerfile
+
+all: build-linux push
 
 # Build for local machine
 build:
@@ -11,14 +14,14 @@ build:
 
 # Build for Linux 64-bit (cross-compilation for RPI/server)
 build-linux:
-	GOOS=linux GOARCH=amd64 go build -o bin/jeembot-linux .
+	docker buildx build --platform linux/amd64 -f $(DOCKERFILE) -t $(IMAGE_NAME):latest --load .
 
 # Build Docker image
 build-docker:
 	docker build -t $(REGISTRY)/$(IMAGE_NAME):$(TAG) .
 
 push:
-	docker push $(REGISTRY)/$(IMAGE_NAME):$(TAG)
+	docker push $(IMAGE_NAME):latest
 
 run:
 	docker-compose up --build

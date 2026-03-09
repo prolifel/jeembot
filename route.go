@@ -961,9 +961,13 @@ func createAdaptiveCard(message string) AdaptiveCard {
 				if idx := strings.Index(taskName, " (List:"); idx > 0 {
 					taskName = taskName[:idx]
 				}
-			} else if strings.Contains(line, "List:") {
-				// Extract list name
-				listName = strings.TrimSpace(strings.TrimPrefix(line, "List:"))
+				// Also extract list name from the same line: "(List: XXX)"
+				if idx := strings.Index(line, "(List:"); idx >= 0 {
+					listPart := line[idx+6:] // Skip "(List:"
+					if idx2 := strings.Index(listPart, ")"); idx2 > 0 {
+						listName = strings.TrimSpace(listPart[:idx2])
+					}
+				}
 			} else if strings.HasPrefix(line, "http") {
 				taskURL = strings.TrimSpace(line)
 			}

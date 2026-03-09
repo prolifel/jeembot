@@ -1,10 +1,26 @@
-version: '3.8'
-
 services:
   jeembot:
-    build: .
-    ports:
-      - "8080:8080"
-    env_file:
-      - .env
+    container_name: jeembot
+    image: cr.prolifel.com/jeembot:latest
+    networks:
+      - nginx_proxy
+    expose:
+      - "8080"
+    environment:
+      - PORT=${PORT}
+      - CLICKUP_API_TOKEN=${CLICKUP_API_TOKEN}
+      - CLICKUP_LIST_CTI=${CLICKUP_LIST_CTI}
+      - CLICKUP_LIST_CLOUDSEC=${CLICKUP_LIST_CLOUDSEC}
+      - CLICKUP_LIST_SOC=${CLICKUP_LIST_SOC}
+      - CLICKUP_ASSIGNEE_CTI=${CLICKUP_ASSIGNEE_CTI}
+      - CLICKUP_ASSIGNEE_CLOUDSEC=${CLICKUP_ASSIGNEE_CLOUDSEC}
+      - CLICKUP_ASSIGNEE_SOC=${CLICKUP_ASSIGNEE_SOC}
+      - TEAMS_HMAC_SECRET=${TEAMS_HMAC_SECRET}
+      - TEAMS_APP_ID=${TEAMS_APP_ID}
+      - TEAMS_APP_SECRET=${TEAMS_APP_SECRET}
+      - TEAMS_TENANT_ID=${TEAMS_TENANT_ID}
     restart: unless-stopped
+
+networks:
+  nginx_proxy:
+    external: true
